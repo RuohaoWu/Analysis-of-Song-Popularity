@@ -1,0 +1,414 @@
+---
+title: "Analysis of Song Popularity In Spotify via EDA Plots and Text Analyses"
+author: "Ruohao Wu and Hiren Gupta"
+date: "2022-10-13"
+output:
+  pdf_document:
+    extra_dependencies: ["float"]
+  html_document: default
+editor_options:
+  chunk_output_type: inline
+---
+
+```{r, include = FALSE}
+library(tidyverse)
+library(dplyr)
+library(ggrepel)
+library(spotifyr)
+library(devtools)
+library(tidytuesdayR)
+library(tidytext)
+library(schrute)
+library(SnowballC)
+library(ggplot2)
+library(ggcorrplot)
+library(factoextra)
+library(ggridges)
+library(patchwork)
+library(wordcloud)
+```
+
+```{r, include = FALSE, message=FALSE, warning=FALSE}
+spotify_songs <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-01-21/spotify_songs.csv')
+```
+
+## Abstract
+
+We address the question of how the succes of a song can be defined using different factors by using three specific questions - what components share strong relationship with popularity, how each component evolves over time for each genre, and how composed music has changed over time? We examine the data for songs from spotify' API that ranges from 1957 to 2020 with roughly 33000 songs and 23 variables. We use different visuals to solidify our conclusions. We find that speechiness, danceability, and energy share a strong and positive relationship with popularity, each component changes over time, and music composed today is different from what it was before the year 2000. The songs that could be successful cannot be generalized but can only be understood for current scenarios as music evolves over time.
+
+
+## Introduction
+
+Art in the form of music has been a part of one's life since historical times. To make music more accessible in different parts of the world, technology has overpowered the boundaries to revolutionize the mode of listening music. Spotify was born in 2006 in Sweden and it played a major role in influencing the service provided to stream music across the world. This has given various individuals who intend to enter the industry or learn more about it the option to access it as a form of art. However, from a perspective of an artist, one would like to understand what factors one needs to focus on to define success, or at least estimate it, for the music industry. The Spotify dataset gives us the opportunity to understand the music domain and answer questions that help gain insight into the various components that form the basis of different genres and understand how popularity of a song is based on genres and the underlying components. Therefore, this study targets the Spotify dataset in global context to primarily explore the understandig of popularity and genres with respect to the components that define music. To focus on the main question mentioned above, we would be investigating the dataset to form an understanding of the following questions:
+
+  * Which componenets primarily influence the popularity of a song?
+  
+  * Do we observe any specific trends in how the different components behave for different genres?
+  
+  * What is primarily the difference in the songs that were composed in this century in comparison to the last century on the basis of their title names?
+  
+To answer these questions, it is essential to get the right understanding of the data and the terms that have been to quantify and classify music.
+
+
+## Data
+
+To formulate and articluate the right results, a comprehensive understanding of the data is essential. The data for the current study were packaged to get access of data from Spotify's API. The dataset has roughly 32000 observations, where each observation represents a song. There are 23 variables - categorical and numerical - that are used to explain the songs on the basis of audio features and classify on the basis of genres and related information like unique id, popularity, and the artist. The data were extracted and studied from the associated github page and package.
+
+The variables have been measured and described as:
+
+  * `track_id`: Unique ID associated with the song
+  * `track_name`: Name of the song
+  * `track_artist`: Artist of the song
+  * `track_popularity`: Popularity score for the song out of 100 where 100 is the best
+  * `track_album_id`: Album ID associated with the song
+  * `track_album_name`: Album name for the song
+  * `track_album_release_date`: Release date for the Album
+  * `playlist_name`: Name of the associated playlist with the song
+  * `playlist_id`: ID of the associated playlist with the song
+  * `playlist_genre`: Genre of the associated playlist with the song
+  * `playlist_subgenre`: Sub-genre of the associated playlist with the song
+  * `danceability`: Continuous score from 0 to 1 for how danceable the song is 
+  * `energy`: Continuous score from 0 to 1 for how energetic the song is 
+  * `key`: Discrete score from 0 to 11 on the basis of Pitch Class and -1 if no key
+  * `loudness`: Continuous score from -60 to 0 dB for the amplitude of how loud the song is
+  * `mode`: Score of 1 for major for high melodic content & 0 for minor for low melodic content
+  * `speechiness`: Continuous score from 0 to 1 for the presence of spoken words in the track
+  * `acousticness`: Continuous score from 0 to 1 for how acoustic the song is
+  * `instrumentalness`: Continuous score from 0 to 1 for how much vocal the song has
+  * `liveness`: Continuous score from 0 to 1 for how probable that the song was performed live
+  * `valence`: Continuous score from 0 to 1 for how positive the music is for the song
+  * `tempo`: Continuous score from 0 to 1 for how fast the song is
+  * `duration_ms`: Continuous score from 0 to 1 for how long the song is
+
+We do not use all the variables like the unique variables as they would not provide any distinct explanation for the visuals. The variables are still mentioned to provide complete understanding of the description available for the analysis.
+
+
+To further make the data more visually understood and interactive, we have created a Shiny application that would help with a better understanding of the data and the relevant distribution visually. The link for the graph is [here: https://ap24is-ruohao-wu.shinyapps.io/613Shinny/](https://ap24is-ruohao-wu.shinyapps.io/613Shinny/).
+
+
+
+```{r, fig.cap="Distribution of Songs in Different Playlist Genre", echo = FALSE, message=FALSE, warning=FALSE, fig.height=2.5}
+spotify_songs %>%
+  ggplot(aes(x = fct_infreq(playlist_genre))) + 
+  geom_bar(fill = "black") + 
+  coord_flip() +
+  labs(x = "Genre of a Song", y = "Frequency",
+       subtitle = "Ordered Most to Least Frequent")+
+  theme(plot.subtitle = element_text(hjust = 0.5))
+```
+
+
+
+
+```{r, include = FALSE, message=FALSE, warning=FALSE}
+spotify_songs_sub <- spotify_songs[, -c(1:2,5,6,9)]
+```
+
+
+```{r, include = FALSE, message=FALSE, warning=FALSE}
+spotify_songs_sub_quan <- spotify_songs_sub[, -c(1,3:6)]
+spotify_songs_cor <- spotify_songs_sub[, -c(1:6)]
+```
+
+
+```{r, echo = FALSE, fig.cap="Correlation Matrix for the Different Components of a Song", fig.height=4}
+CDI_cor <- cor(spotify_songs_cor)
+ggcorrplot(CDI_cor,
+method = "circle",
+hc.order = TRUE,
+type = "lower")
+```
+
+ &nbsp; 
+
+
+```{r, include = FALSE, message=FALSE, warning=FALSE}
+spotify_quan_pca <- prcomp(spotify_songs_cor, center = TRUE, scale. = TRUE)
+summary(spotify_quan_pca)
+```
+
+
+```{r, include = FALSE, message=FALSE, warning=FALSE}
+spotify_quan_pca$rotation
+```
+
+
+```{r, include = FALSE, message=FALSE, warning=FALSE}
+spotify_quan_pca_matrix <- spotify_quan_pca$x
+head(spotify_quan_pca_matrix)
+```
+
+
+```{r, include = FALSE}
+spotify_quan_pca_matrix <- spotify_quan_pca$x
+head(spotify_quan_pca_matrix)
+```
+
+
+```{r, include= FALSE}
+spotify_songs_sub_quan <- spotify_songs_sub_quan %>%
+  mutate(pc1 = spotify_quan_pca_matrix[,1],
+         pc2 = spotify_quan_pca_matrix[,2])
+```
+
+
+```{r, echo = FALSE, fig.cap="Scree Plot for PCA (Also Known as Elbow Plot)", fig.height=4.5}
+fviz_eig(spotify_quan_pca, addlabels = TRUE) +
+geom_hline(yintercept = 100 * (1 / ncol(spotify_quan_pca$x)), 
+           linetype = "dashed",
+           color = "darkred") +
+  labs(subtitle = 'How Much Proportion of Variation Does Each Variable Have?') +
+  theme(plot.subtitle = element_text(hjust = 0.5))
+```
+
+
+```{r, echo = FALSE, fig.cap="Biplot for PC1 and PC2", fig.height=4}
+fviz_pca_biplot(spotify_quan_pca, label = "var",
+#                 # Plot PC1 and PC3
+                 axes = c(1, 2),
+#                 # Change the alpha for the observations - 
+#                 # which is represented by ind
+                 alpha.ind = .25 ,
+#                 # Modify the alpha for the variables (var):
+                 alpha.var = .75,
+                 repel = TRUE,
+#                 # Set the color of the points to decades variable:
+                 col.ind = spotify_songs_sub$track_popularity, 
+#                 # Modify the color of the variables
+                 col.var = "darkblue" ) +
+   scale_color_gradient(low = "red", high = "yellow") +
+   labs(color = "track_popularity", subtitle = 'How Are PC1 and PC2 Related With Different Song Components?') +
+   theme(legend.position = "bottom", plot.subtitle = element_text(hjust = 0.5))
+```
+
+
+```{r, include = FALSE}
+Year = spotify_songs$track_album_release_date <- strtrim(spotify_songs$track_album_release_date,4)
+
+spotify_songs_time<-spotify_songs %>%
+  mutate(track_album_release_date <- Year)
+
+spotify_songs_time_n <-  spotify_songs_time%>%
+  mutate(Year = as.numeric(Year))
+```
+
+
+```{r, echo = FALSE, fig.cap="Heat Map for PC1 and PC2 versus Popularity", message=FALSE, warning=FALSE, fig.height=4}
+PC1 <- spotify_songs_sub_quan %>%
+  ggplot(aes(x = pc1, y = track_popularity)) +
+  geom_hex() +
+  scale_fill_gradient2(low = "white", mid = "blue", high = "red",
+                       midpoint = 4)  +
+  labs(x = "PC1", y = "Popularity") +
+  geom_smooth(span = 0.1) +
+  theme(legend.position = "bottom", plot.subtitle = element_text(hjust = 0.5))
+
+PC2 <- spotify_songs_sub_quan %>%
+  ggplot(aes(x = pc2, y = track_popularity)) +
+  geom_hex() +
+  scale_fill_gradient2(low = "white", mid = "blue", high = "red",
+                       midpoint = 4)  +
+  labs(x = "PC2", y = "Popularity", subtitle = 'Is There a Negative or a Positive Relationship Between PC1 and PC2 vs. Popularity?')+
+  geom_smooth() +
+  theme(legend.position = "bottom", plot.subtitle = element_text(hjust = 1.0))
+
+PC1 + PC2
+```
+
+
+
+```{r, echo = FALSE, fig.cap="Violin Plot for Popularity Given Six Genres", fig.height=3}
+spotify_songs %>%
+  ggplot(aes(x = track_popularity, y = playlist_genre, fill = playlist_genre)) + 
+  geom_violin(alpha = 0.5) + 
+  geom_boxplot(width = .2, alpha = .5) +
+  labs(subtitle = "Track Popularity from 0 to 100 (by Playlist Genre & 100 is Highest)", 
+       x = "Popularity", y = "", fill = "Genre")+
+  theme(plot.subtitle = element_text(hjust = 0.5))
+```
+
+
+```{r, echo = FALSE, fig.cap= "Distribution of Songs Given Released Time (Median Between 2015 and 2016)", fig.height=3}
+spotify_songs_time_n %>%
+  ggplot(aes(x = Year)) +
+  geom_histogram(binwidth = 10, color = "black", fill = "lightblue") + 
+  geom_vline(aes(xintercept = median(Year)), color = "red") + 
+  labs(title = "Left Skewed Distribution of Songs From 1957 to 2020", x = "Year", y = "Frequency")+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+
+```{r, include = FALSE}
+songs_g2000 <- spotify_songs_time_n%>% filter(Year > 2000)
+songs_s2000 <- spotify_songs_time_n%>% filter(Year <= 2000)
+nrow(songs_g2000)
+nrow(songs_s2000)
+```
+
+
+
+```{r, include = FALSE}
+table2 <- songs_s2000 %>% 
+  group_by(playlist_genre) %>% 
+  summarise(liveness = (mean(liveness)),
+            dance = (mean(danceability)),
+            energy = (mean(energy)),
+            mode = (mean(mode)),
+            speech = (mean(speechiness)),
+            instrumental = (mean(instrumentalness)),
+            valence = (mean(valence)))
+tableLong2 <- table2 %>% pivot_longer(cols = c(liveness,dance,energy,mode,speech,instrumental,valence), 
+             names_to = c("Components"))
+```
+
+
+
+```{r, include = FALSE}
+table1 <- songs_g2000 %>% 
+  group_by(playlist_genre) %>% 
+  summarise(liveness = (mean(liveness)),
+            dance = (mean(danceability)),
+            energy = (mean(energy)),
+            mode = (mean(mode)),
+            speech = (mean(speechiness)),
+            instrumental = (mean(instrumentalness)),
+            valence = (mean(valence)))
+tableLong1 <- table1 %>% pivot_longer(cols = c(liveness,dance,energy,mode,speech,instrumental,valence),
+                                      names_to = c("Components"))
+```
+
+```{r, echo = FALSE, fig.cap="Area Plot of Different Genres for Various Components for Songs Before and After 2000", fig.height=4}
+A1 <- tableLong2 %>%
+  ggplot(aes(x=playlist_genre, y=value, fill = Components, group = Components)) +
+  geom_area(show.legend = F) +
+  labs(x = "Genre", y = "", subtitle = "Before 2000") +
+  theme(legend.position = "right", axis.text.y=element_blank(), plot.subtitle = element_text(hjust = 0.5))
+
+A2 <- tableLong1 %>%
+  ggplot(aes(x=playlist_genre, y=value, fill = Components, group = Components)) +
+  geom_area() +
+  labs(x = "Genre", y = "", subtitle = "After 2000", title = "Variation in Mean Values for Componenets Across Different Genres") +
+  theme(legend.position = "right", axis.text.y=element_blank(), plot.subtitle = element_text(hjust = 0.5), plot.title = element_text(hjust = 0.75))
+
+A1 + A2
+```
+
+
+```{r, include = FALSE}
+songsG <- songs_g2000 %>%
+  dplyr::select(track_album_release_date, track_name)
+```
+
+
+```{r, include = FALSE}
+songs_tokensG <- songsG %>%
+  unnest_tokens(word, track_name)
+
+songs_tokensG <- songs_tokensG %>%
+  filter(!(word %in% stop_words$word))
+
+songs_tokensG <- songs_tokensG %>%
+  # Create a new column stem with the wordStem function:
+  mutate(stem = wordStem(word))
+```
+
+
+
+```{r, include = FALSE}
+songsS <- songs_s2000 %>%
+  dplyr::select(track_album_release_date, track_name)
+```
+
+
+```{r, include = FALSE}
+songs_tokensS <- songsS %>%
+  unnest_tokens(word, track_name)
+
+songs_tokensS <- songs_tokensS %>%
+  filter(!(word %in% stop_words$word))
+
+songs_tokensS <- songs_tokensS %>%
+  # Create a new column stem with the wordStem function:
+  mutate(stem = wordStem(word))
+```
+
+
+```{r, echo = FALSE, fig.cap="WordCloud for Tokens in Titles of Songs Before 2000 (left) and After 2000 (right)", warning=FALSE}
+par(mfrow=c(1,2))
+
+token_summaryG <- songs_tokensG %>%
+  group_by(stem) %>%
+  # Instead of summarize we can use the count function
+  count() %>%
+  ungroup() 
+
+
+token_summaryS <- songs_tokensS %>%
+  group_by(stem) %>%
+  # Instead of summarize we can use the count function
+  count() %>%
+  ungroup() 
+
+# Now make a wordcloud :
+library(wordcloud)
+# wordcloud(words = token_summary$stem, freq = token_summary$n)
+WC2 <- wordcloud(words = token_summaryS$stem, freq = token_summaryS$n, 
+          random.order = FALSE, max.words = 100, 
+          colors = brewer.pal(8, "Dark2"))
+
+
+# Now make a wordcloud :
+library(wordcloud)
+# wordcloud(words = token_summary$stem, freq = token_summary$n)
+WC1 <- wordcloud(words = token_summaryG$stem, freq = token_summaryG$n, 
+          random.order = FALSE, max.words = 100, 
+          colors = brewer.pal(8, "Dark2"))
+
+```
+
+ &nbsp; 
+ &nbsp; 
+ &nbsp; 
+ &nbsp; 
+ &nbsp; 
+ &nbsp; 
+ &nbsp; 
+ &nbsp; 
+ &nbsp; 
+ &nbsp; 
+ &nbsp; 
+ &nbsp;  
+ 
+
+
+
+## Methods
+
+To gather conclusive information and easily interpretable insights from the large data set, we use visuals in 1D and 2D for the different relevant variables for the questions that we want to address in the study. To first get an understanding of the data, we use a bar chart in figure 1 to get the number of songs for each genre. The questions are addressed using multiple plots as we communicate using Correlation Matrix, Scree plot and Biplot for Principal Components Analysis, and Heat Map in figure 2, 3, 4, and 5, respectively, to display the relationship that exists between the various components of the song and popularity to analyze which components have the highest influence on popularity. We use a violin plot in figure 6 to understand the distribution of popularity for each genre. We also use a histogram in figure 7 to understand the distribution of songs across time. Further, to understand the trend that exists across genres for each musical component, we use an Area plot in figure 8 with the mean values for each component for the different genres across different time periods. After understanding the influence of components on the popularity of a song and evaluating trends across genres for each componenet, we understand how the composed songs have changed on the basis of their titles across the two periods of before and after 2000 using wordcloud in figure 9. All the plots were made using Rmakrdown and the various available libraries.
+
+
+## Results
+
+The main question here focuses on the genres and their study, hence we gathered the data to reveal the distribution of the different genres. We can see in figure 1 that the distribution indicates that all the genres lie closely in the range of roughly 5000 songs to 6000 songs. This helps us in confirming that the understanding would be based on a large number of observations that are similar in count.
+
+To address the relationship between popularity and the musical components, the visuals used to analyze and explore the data were effective in communicating that high popularity is asscoiated with four components - speechiness, acousticness, instrumentalness, and danceability. To understand the above stated relationship, we first consider figure 3, the Scree plot, which provides an understanding of the number of principal components, in other words PC, that should be studied for the most variation that is being significantly explained. On the basis of figure 3, we understand that our cut off is until PC4, but we only need PC1 and PC2 here. Even though PC3 and PC4 explain more variation of the dataset compared to the average of each variable, the two components do not provide enough information compared to the first two components. Additionally, adding more comparisons would only provide over-complicated results that would not be easily interpretable. Hence, to gather the most useful information, we look at PC1 and PC2 biplot. We also use the heat map to convert the high dimensional PCA explanation into lower dimensional space. 
+
+We individually draw conclusions to understand the relationship between PC1 and popularity and PC2 and popularity. The heat maps in figure 5 communicate that PC1 has somewhat of a negative relationship (only when PC1 is positive and no relationship otherwise) with popularity and PC2 has a positive relationship with popularity, respectively. To understand the impact of only one component, we look at the second quadrant in figure 4 as the relationship between PC2 and high popularity does not have any impact due to PC1 as PC1 is negative. The other PC1 positive quadrants will not have a definite relationship explained as the impact would include a combined effect of PC1 and PC2. The third quadrant does exhibit a relationship with instrumentalness as well. Hence, we conclude that the three variables in the first quadrant and one variable in the second quadrant share a strong relationship with popularity. To further understand correlation and eliminate the issues that could exhibit due to interpretation, we discover that acousticness is highly negatively correlated with energy through the correlation matrix in figure 2. Since energy is more interpretable, we conclude that speechiness, energy, instrumentalness, and danceability share a strong relationship with popularity, where the relationship shared by speechiness, instrumentalness, and danceability with popularity is positive and the relationship between energy and popularity is negative.
+
+This brings up the question of how each component varies across the genres for different time period. Before every aspect of genre analysis, we first see which genre has the most popularity. The violin plot in figure 6 indicates that pop and latin have the highest means for popularity. Then, we decide to break the data set into two time periods - before and after year 2000. We try to visualize it using figure 7 but it communicates that the split is roughly 17% and 83% for before and after year 2000, respectively. However, we still use the same split as the number of observations are adequate and contextually relevant to interpret as using the median, which is between 2015 and 2016, would not help interpret and compare easily. Now, the Area plot in figure 8 makes it easy to interpret how the influence of each component has changed across genres for the two different time periods, as we have the average mean scores for each component for each genre plotted. 
+
+We find interesting results like instrumentalness, valence, and danceability have the highest mean score for Latin now instead of EDM, which used to have the highest score before for all the three but now only has instrumental as the highest score (shared with Latin still). The score for mean value for mode has also changed from rap to latin music. We expect to see rap have the highest speechiness, which is still the case.  Similarly, we expect to see high score for liveness for rap and rock, which is still the case and has not changed across the years. There has been shift in the energy score from EDM to rock music and r&b has usually low scores for all the components. Pop, which is the most popular genre as seen in figure 6, has not changed much over time and has average for all components, which indicate that the extreme nature of some songs could be underappreciated by selective music folks but pop is neutral for almost all of them.
+
+Finally, we use the wordcloud in figure 9 to understand how the music composed has changed over the years. We analyze the titles for the tracks and find some unintuitive tokens in the titles. We explore that remast, which is potentially stemed from remaster, indicates that most of the songs from 1957 to 2000 that are available in the dataset are the remastered version that have the change music in terms of quality of sound and image - audiophonic, cinematic, or videographic. We also see version and 2011 as many songs from before 2000 are different versions of the old songs and many of them were uploaded in 2011 as spotify roughly came to the US after 2010. On the other hand, we can see that most of the songs from 2000 and onwards have been a remix version, feat by various artists, and have been radio versions of songs that are possibly reduced in length of the original song. One of the tokens that has stayed constant over the years that many songs still have love as a theme but it has certainly decreased over the years as the size of token love in the right wordcloud in figure 9 is smaller.
+
+## Discussion
+
+The analyses above is primarily based on the understanding of the data and the visuals that were created using the different libraries. The conclusions do indicate that there are some particular components like speechiness, instrumentalness, and danceability that share a positive relationship with popularity; whereas, energy shares a negative relationship with popularity. We also observed that many genres have some components highly present in them and some genres do not change over time at all. This is an interesting conclusion as it raises the question on what changes the mean value of a component for a genre over time. Additionally, it raises the question if no change in the mean score for components for a genre makes it more popular as the two most popular genres - pop and latin - had different trajectories - latin evolved over time but pop stayed the same. Finally, the final part of the analyses helps us understand that the data set has remastered version of old songs and many new songs have multiple artists associated and are also remix versions.
+
+The remaster aspect of it raises a question on the data as the scores for the old songs could essentially be impacted due to the remastered version and hence provided some biased result. It is also important to consider that the time bias would certainly exist as the songs that exist in the spotify data for the old songs would essentially be the songs that were in fact popular and remembered as the unpopular songs would not be remembered and tracked. The lack of right and clean data makes the data set not so easy to derive significant and confident results. The limitation of the data can be countered by trying to use technology to gather the old songs and the right scores.
+
+Even though the data posses some issues, it provides insight into the music components associated with popularity, or in other words components, that could be useful to connect with the popular songs. The three strongly related variables with popularity along with the popular genres help us understand that there could be some relation of success in the music industry with certain components but it definitely does not stay the same and the popular components and genres will eventually change with time.
+
+
+
